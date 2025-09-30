@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Instalment Calculator</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    input, select { margin: 5px; padding: 5px; }
+    table { border-collapse: collapse; margin-top: 20px; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background-color: #f2f2f2; }
+    .help { color: #555; font-size: 0.95em; margin-bottom: 15px; }
+    .warning { color: #c00; }
+    .remaining-debt { color: #c00; font-weight: bold; margin-top: 20px; }
+  </style>
+  <script>
+    function togglePaymentDay() {
+      const freq = document.getElementById('frequency').value;
+      const dayDiv = document.getElementById('paymentDayDiv');
+      if (freq === "7" || freq === "14") {
+        dayDiv.style.display = 'inline';
+      } else {
+        dayDiv.style.display = 'none';
+      }
+    }
+  </script>
+</head>
+<body>
+  <h2>Instalment Calculator</h2>
+  <label>Current Debt: $</label><input type="number" id="currentDebt" value="0"><br>
+  <label>Future Months: </label><input type="number" id="futureMonths" value="0"><br>
+  <label>Monthly Invoice: $</label><input type="number" id="monthlyInvoice" value="0"><br>
+  <label>Payment Frequency: </label>
+  <select id="frequency" onchange="togglePaymentDay()">
+    <option value="7">Weekly</option>
+    <option value="14">Fortnightly</option>
+    <option value="30">Monthly</option>
+  </select>
+  <span id="paymentDayDiv" style="display:inline;">
+    <label style="margin-left:10px;">(Optional) Payment Day: </label>
+    <select id="paymentDay">
+      <option value="">No preference</option>
+      <option value="0">Sunday</option>
+      <option value="1">Monday</option>
+      <option value="2">Tuesday</option>
+      <option value="3">Wednesday</option>
+      <option value="4">Thursday</option>
+      <option value="5">Friday</option>
+      <option value="6">Saturday</option>
+    </select>
+  </span>
+  <br>
+  <label>(Optional) Preferred Instalment Amount: $</label><input type="number" id="preferredAmount" min="1"><br>
+  <label>Start Date: </label><input type="date" id="startDate"><br>
+  <div id="warningMsg" class="warning"></div>
+  <button onclick="generateSchedule()">Generate Schedule</button>
+
+  <h3>Total Amount: $<span id="totalAmount">0</span></h3>
+  <h3>Number of Installments: <span id="numInstallments">0</span></h3>
+  <table id="scheduleTable">
+    <thead>
+      <tr><th>#</th><th>Date</th><th>Instalment Amount</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div id="remainingDebtInfo" class="remaining-debt"></div>
+
+  <script>
+    function generateSchedule() {
+      document.getElementById('warningMsg').innerText = "";
+      document.getElementById('remainingDebtInfo').innerText = "";
+
+      let debt = parseFloat(document.getElementById('currentDebt').value) || 0;
+      let months = parseInt(document.getElementById('futureMonths').value) || 0;
+      let invoice = parseFloat(document.getElementById('monthlyInvoice').value) || 0;
+      let freq = parseInt(document.getElementById('frequency').value);
+      let startDate = new Date(document.getElementById('startDate').value);
+      let paymentDay = document.getElementById('paymentDay').value;
+      let preferredAmount = parseFloat(document.getElementById('preferredAmount').value);
+
+      let total = Math.round(debt + months * invoice);
+      document.getElementById('totalAmount').innerText = total;
+
+      let tbody = document.querySelector("#scheduleTable tbody");
+      tbody.innerHTML = "";
+
+      // Calculate end date for allowed months
+      let lastAllowedDate = new Date(startDate);
+      lastAllowedDate.setMonth(startDate.getMonth() + months);
+
+      // Align first payment to chosen weekday if provided
+      let payDate = new Date(startDate);
+      if ((freq === 7 || freq === 14) && paymentDay !== "") {
+        paymentDay = parseInt(paymentDay);
+        while (payDate.getDay() !== paymentDay) {
+          payDate.setDate(payDate.getDate() + 1);
+        }
+      }
+
+      if (preferredAmount && preferredAmount > 0) {
+        // Generate ALL payments needed to clear the debt
+        let dates = [];
+        let remaining = total;
+        let currentDate = new Date(payDate);
+        while (remaining > 0) {
+          dates.push(new Date(currentDate));
+          remaining -= preferredAmount;
+          if (freq === 30) {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+          } else {
+            currentDate.setDate(currentDate.getDate() + freq);
+          }
+        }
+
+        let amounts = [];
+        remaining = total;
+        for (let i = 0; i < dates.length; i++) {
+          let pay = (remaining > preferredAmount) ? preferredAmount : remaining;
+          amounts.push(pay);
+          remaining -= pay;
+        }
+
+        // Render table
+        for (let i = 0; i < amounts.length; i++) {
+          let dateStr = dates[i].toLocaleDateString('en-GB');
+          let row = `<tr><td>${i+1}</td><td>${dateStr}</td><td>${amounts[i]}</td></tr>`;
+          tbody.innerHTML += row;
+        }
+        document.getElementById('numInstallments').innerText = amounts.length;
+
+        // Calculate the number of months/payments remaining after allowed months
+        let monthsOver = 0;
+        for (let i = 0; i < dates.length; i++) {
+          if (dates[i] > lastAllowedDate) {
+            monthsOver++;
+          }
+        }
+        let debtRemaining = monthsOver * invoice;
+        if (monthsOver > 0 && invoice > 0) {
+          document.getElementById('remainingDebtInfo').innerText =
+            `Warning: After ${months} months, you will still owe $${debtRemaining.toFixed(2)}, which is equal to your monthly invoice ($${invoice}) × ${monthsOver}.`;
+        } else {
+          document.getElementById('remainingDebtInfo').innerText = "";
+        }
+      } else {
+        // Default logic: fit within months, last payment adjusts
+        let scheduleDates = [];
+        if (freq === 30) { // Monthly
+          for (let i = 0; i < months; i++) {
+            let d = new Date(startDate);
+            d.setMonth(startDate.getMonth() + i);
+            scheduleDates.push(d);
+          }
+        } else {
+          let d = new Date(payDate);
+          let maxEndDate = new Date(startDate);
+          maxEndDate.setMonth(startDate.getMonth() + months);
+          while (d <= maxEndDate) {
+            scheduleDates.push(new Date(d));
+            d.setDate(d.getDate() + freq);
+          }
+        }
+
+        let numDates = scheduleDates.length;
+        let amounts = [];
+        let installmentAmount = Math.round(total / numDates);
+        for (let i = 0; i < numDates - 1; i++) amounts.push(installmentAmount);
+        amounts.push(total - installmentAmount * (numDates - 1));
+        for (let i = 0; i < amounts.length; i++) {
+          let dateStr = scheduleDates[i].toLocaleDateString('en-GB');
+          let row = `<tr><td>${i+1}</td><td>${dateStr}</td><td>${amounts[i]}</td></tr>`;
+          tbody.innerHTML += row;
+        }
+        document.getElementById('numInstallments').innerText = amounts.length;
+        document.getElementById('remainingDebtInfo').innerText = "";
+      }
+    }
+    window.onload = function() { togglePaymentDay(); }
+  </script>
+</body>
+</html>
